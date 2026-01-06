@@ -1,0 +1,200 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Plane, Rocket, Zap } from 'lucide-react';
+
+const FlappyPlane = () => {
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [score, setScore] = useState(0);
+  const [planeY, setPlaneY] = useState(250);
+  const [velocity, setVelocity] = useState(0);
+  const [pipes, setPipes] = useState([]);
+  const [planeType, setPlaneType] = useState(0);
+  
+  const gameRef = useRef(null);
+  const planeSize = 40;
+  const gravity = 0.4;
+  const jump = -9;
+  const pipeWidth = 60;
+  const pipeGap = 220;
+  const gameWidth = 400;
+  const gameHeight = 600;
+
+  const planes = [
+    { icon: Plane, color: 'text-blue-600', name: 'Jet' },
+    { icon: Rocket, color: 'text-red-600', name: 'Rocket' },
+    { icon: Zap, color: 'text-yellow-500', name: 'Lightning' }
+  ];
+
+  const CurrentPlaneIcon = planes[planeType].icon;
+  const planeColor = planes[planeType].color;
+
+  useEffect(() => {
+    const newPlaneType = Math.floor(score / 10) % planes.length;
+    setPlaneType(newPlaneType);
+  }, [score]);
+
+  useEffect(() => {
+    if (!gameStarted || gameOver) return;
+
+    const gameLoop = setInterval(() => {
+      setVelocity(v => v + gravity);
+      setPlaneY(y => {
+        const newY = y + velocity;
+        if (newY > gameHeight - planeSize || newY < 0) {
+          setGameOver(true);
+          return y;
+        }
+        return newY;
+      });
+
+      setPipes(prevPipes => {
+        let newPipes = prevPipes.map(pipe => ({
+          ...pipe,
+          x: pipe.x - 2.5
+        })).filter(pipe => pipe.x > -pipeWidth);
+
+        if (newPipes.length === 0 || newPipes[newPipes.length - 1].x < gameWidth - 300) {
+          const gapY = Math.random() * (gameHeight - pipeGap - 150) + 75;
+          newPipes.push({
+            x: gameWidth,
+            gapY: gapY,
+            scored: false
+          });
+        }
+
+        newPipes.forEach(pipe => {
+          if (!pipe.scored && pipe.x + pipeWidth < gameWidth / 2 - planeSize / 2) {
+            pipe.scored = true;
+            setScore(s => s + 1);
+          }
+
+          const planeLeft = gameWidth / 2 - planeSize / 2;
+          const planeRight = planeLeft + planeSize;
+          const planeTop = planeY;
+          const planeBottom = planeY + planeSize;
+
+          if (pipe.x < planeRight && pipe.x + pipeWidth > planeLeft) {
+            if (planeTop < pipe.gapY || planeBottom > pipe.gapY + pipeGap) {
+              setGameOver(true);
+            }
+          }
+        });
+
+        return newPipes;
+      });
+    }, 1000 / 60);
+
+    return () => clearInterval(gameLoop);
+  }, [gameStarted, gameOver, velocity, planeY]);
+
+  const handleJump = () => {
+    if (!gameStarted) {
+      setGameStarted(true);
+      setPipes([{ x: gameWidth, gapY: 200, scored: false }]);
+    }
+    if (gameOver) {
+      setGameOver(false);
+      setGameStarted(false);
+      setScore(0);
+      setPlaneY(250);
+      setVelocity(0);
+      setPipes([]);
+      setPlaneType(0);
+    } else {
+      setVelocity(jump);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleJump();
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [gameStarted, gameOver]);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-sky-400 to-sky-300 p-4">
+      <div className="mb-4 text-center">
+        <h1 className="text-4xl font-bold text-white mb-2">Flappy Plane</h1>
+        <p className="text-2xl font-bold text-white">Score: {score}</p>
+        <p className="text-lg text-white">Aircraft: {planes[planeType].name}</p>
+      </div>
+      
+      <div 
+        ref={gameRef}
+        className="relative bg-sky-200 cursor-pointer overflow-hidden"
+        style={{ width: gameWidth, height: gameHeight }}
+        onClick={handleJump}
+      >
+        {/* Clouds */}
+        <div className="absolute top-10 left-20 w-20 h-12 bg-white rounded-full opacity-70"></div>
+        <div className="absolute top-40 left-60 w-24 h-14 bg-white rounded-full opacity-70"></div>
+        <div className="absolute top-80 left-10 w-28 h-16 bg-white rounded-full opacity-70"></div>
+
+        {/* Plane */}
+        <div 
+          className={`absolute ${planeColor} transition-transform`}
+          style={{ 
+            left: gameWidth / 2 - planeSize / 2, 
+            top: planeY,
+            transform: `rotate(${Math.min(Math.max(velocity * 3, -30), 30)}deg)`
+          }}
+        >
+          <CurrentPlaneIcon size={planeSize} fill="currentColor" />
+        </div>
+
+        {/* Pipes */}
+        {pipes.map((pipe, i) => (
+          <React.Fragment key={i}>
+            {/* Top pipe */}
+            <div 
+              className="absolute bg-green-600 border-4 border-green-700"
+              style={{
+                left: pipe.x,
+                top: 0,
+                width: pipeWidth,
+                height: pipe.gapY
+              }}
+            />
+            {/* Bottom pipe */}
+            <div 
+              className="absolute bg-green-600 border-4 border-green-700"
+              style={{
+                left: pipe.x,
+                top: pipe.gapY + pipeGap,
+                width: pipeWidth,
+                height: gameHeight - pipe.gapY - pipeGap
+              }}
+            />
+          </React.Fragment>
+        ))}
+
+        {/* Start/Game Over screen */}
+        {(!gameStarted || gameOver) && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="text-center text-white">
+              <h2 className="text-3xl font-bold mb-4">
+                {gameOver ? 'Game Over!' : 'Flappy Plane'}
+              </h2>
+              {gameOver && <p className="text-xl mb-4">Final Score: {score}</p>}
+              <p className="text-lg mb-2">
+                {gameOver ? 'Click to Restart' : 'Click or Press Space to Start'}
+              </p>
+              <p className="text-sm">Avoid the pipes!</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 text-center text-white">
+        <p className="text-sm">Click screen or press SPACE to flap</p>
+      </div>
+    </div>
+  );
+};
+
+export default FlappyPlane;
